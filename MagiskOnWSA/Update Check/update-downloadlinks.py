@@ -8,8 +8,8 @@ with open('README.md', 'r') as file:
 # Parse the content with BeautifulSoup
 soup = BeautifulSoup(readme_content, 'html.parser')
 
-# Define the headers to locate the table
-headers = ['Operating System', 'Download Page', 'Download Mirror']
+# Define the headers to locate the table (mirrors were removed, the table now has 2 columns)
+headers = ['Operating System', 'Download Page']
 
 # Initialize target_table
 target_table = None
@@ -17,7 +17,7 @@ target_table = None
 # Find the table with the specified headers
 for table in soup.find_all('table'):
     ths = table.find_all('th')
-    if len(ths) == 3:
+    if len(ths) == len(headers):
         th_texts = [th.get_text(strip=True) if th.img is None else (th.img['alt'] if 'alt' in th.img.attrs else '') for th in ths]
         if all(header_text == header for header_text, header in zip(th_texts, headers)):
             target_table = table

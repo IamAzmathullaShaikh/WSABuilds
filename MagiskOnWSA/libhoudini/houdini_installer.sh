@@ -162,7 +162,8 @@ make_changes() {
     
     local SYSTEM_MNT="$SYSTEM_ROOT"
     local VENDOR_MNT="$VENDOR_ROOT"
-    local HOUDINI_LOCAL_PATH="$(realpath ./libhoudini)"
+    local HOUDINI_LOCAL_PATH
+    HOUDINI_LOCAL_PATH="$(realpath ./libhoudini)"
     
     # Check if Houdini files exist
     if [ ! -d "$HOUDINI_LOCAL_PATH" ]; then
@@ -350,6 +351,7 @@ make_changes() {
         TEMP_RC="/tmp/init_windows_temp.rc"
         
         # Process the file line by line to add exec commands after mount bind commands
+        # shellcheck disable=SC2024 # TEMP_RC is a user-writable temp file, the sudo applies to reading INIT_WINDOWS_RC
         sudo awk '
         {
             print $0
@@ -386,8 +388,9 @@ make_changes() {
 # Calculate target sizes
 calculate_sizes() {
     # Get current sizes
-    local system_size=$(du --apparent-size -sB1 "$WSA_PATH/system.vhdx" | cut -f1)
-    local vendor_size=$(du --apparent-size -sB1 "$WSA_PATH/vendor.vhdx" | cut -f1)
+    local system_size vendor_size
+    system_size=$(du --apparent-size -sB1 "$WSA_PATH/system.vhdx" | cut -f1)
+    vendor_size=$(du --apparent-size -sB1 "$WSA_PATH/vendor.vhdx" | cut -f1)
     
     # System: triple the size
     SYSTEM_TARGET_SIZE=$((system_size * 3))

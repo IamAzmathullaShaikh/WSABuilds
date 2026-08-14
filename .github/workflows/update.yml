@@ -139,20 +139,22 @@ jobs:
 
       - name: Check Release type and get latest version and row/column numbers
         run: |
-          verofwsa=${{ inputs.wsa_ver || needs.check.outputs.LATEST_WIF_VER || needs.check.outputs.LATEST_RETAIL_VER }}
+          verofwsa="${{ inputs.wsa_ver || needs.check.outputs.LATEST_WIF_VER || needs.check.outputs.LATEST_RETAIL_VER }}"
           win11x64_link="<p><a href=\"https://github.com/MustardChef/WSABuilds/releases/tag/Windows_11_${verofwsa}\"><img alt=\"win11x64downpre\" src=\"https://img.shields.io/badge/Download%20Latest%20Pre--Release%20Builds-Windows%2011%20x64-orange?style=for-the-badge&amp;logo=windows11\"/></a></p>"
           win11arm64_link="<p><a href=\"https://github.com/MustardChef/WSABuilds/releases/tag/Windows_11_${verofwsa}_arm64\"><img alt=\"win11arm64downpre\" src=\"https://img.shields.io/badge/Download%20Latest%20Pre--Release%20Builds-Windows%2011%20arm64-orange?style=for-the-badge&amp;logo=windows11\"/></a></p>"
           win10x64_link="<p><a href=\"https://github.com/MustardChef/WSABuilds/releases/tag/Windows_10_${verofwsa}\"><img alt=\"win10x64down\" src=\"https://img.shields.io/badge/Download%20Latest%20Pre--Release%20Builds-Windows%2010%20x64-orange?style=for-the-badge&amp;logo=windows\"/></a></p>"
           win11x64_link_retail="<p><a href=\"https://github.com/MustardChef/WSABuilds/releases/tag/Windows_11_${verofwsa}\"><img alt=\"win11x64downstable\" src=\"https://img.shields.io/badge/Download%20Latest%20Stable%20Builds-Windows%2011%20x64-blue?style=for-the-badge&amp;logo=windows11\"/></a></p>"
           win11arm64_link_retail="<p><a href=\"https://github.com/MustardChef/WSABuilds/releases/tag/Windows_11_${verofwsa}_arm64\"><img alt=\"win11arm64downstable\" src=\"https://img.shields.io/badge/Download%20Latest%20Stable%20Builds-Windows%2011%20arm64-blue?style=for-the-badge&amp;logo=windows11\"/></a></p>"
           win10x64_link_retail="<p><a href=\"https://github.com/MustardChef/WSABuilds/releases/tag/Windows_10_${verofwsa}\"><img alt=\"win10x64down\" src=\"https://img.shields.io/badge/Download%20Latest%20Stable%20Builds-Windows%2010%20x64-blue?style=for-the-badge&amp;logo=windows\"/></a></p>"
-          echo "LINK_FOR_W11X64=$win11x64_link" >> $GITHUB_ENV
-          echo "LINK_FOR_W11ARM64=$win11arm64_link" >> $GITHUB_ENV
-          echo "LINK_FOR_W10X64=$win10x64_link" >> $GITHUB_ENV
-          echo "LATEST_VER=$verofwsa" >> $GITHUB_ENV
-          echo "LINK_FOR_W11X64_RETAIL=$win11x64_link_retail" >> $GITHUB_ENV
-          echo "LINK_FOR_W11ARM64_RETAIL=$win11arm64_link_retail" >> $GITHUB_ENV
-          echo "LINK_FOR_W10X64_RETAIL=$win10x64_link_retail" >> $GITHUB_ENV
+          {
+            echo "LINK_FOR_W11X64=${win11x64_link}"
+            echo "LINK_FOR_W11ARM64=${win11arm64_link}"
+            echo "LINK_FOR_W10X64=${win10x64_link}"
+            echo "LATEST_VER=${verofwsa}"
+            echo "LINK_FOR_W11X64_RETAIL=${win11x64_link_retail}"
+            echo "LINK_FOR_W11ARM64_RETAIL=${win11arm64_link_retail}"
+            echo "LINK_FOR_W10X64_RETAIL=${win10x64_link_retail}"
+          } >> "$GITHUB_ENV"
 
       - name: Replace Link in README.md for Download Links Table for the WSA ${{ env.LATEST_VER }} update
         if: inputs.release_type == 'WIF'
@@ -196,11 +198,13 @@ jobs:
         id: releasetag
         shell: bash
         run: |
-          currentver=${{ inputs.wsa_ver || needs.check.outputs.LATEST_WIF_VER || needs.check.outputs.LATEST_RETAIL_VER }}
-          echo "WSA_VER=$currentver" >> $GITHUB_ENV
-          echo "WIN11X64_TAG=Windows_11_$currentver" >> $GITHUB_ENV
-          echo "WIN11ARM64_TAG=Windows_11_${currentver}_arm64" >> $GITHUB_ENV
-          echo "WIN10X64_TAG=Windows_10_$currentver" >> $GITHUB_ENV
+          currentver="${{ inputs.wsa_ver || needs.check.outputs.LATEST_WIF_VER || needs.check.outputs.LATEST_RETAIL_VER }}"
+          {
+            echo "WSA_VER=${currentver}"
+            echo "WIN11X64_TAG=Windows_11_${currentver}"
+            echo "WIN11ARM64_TAG=Windows_11_${currentver}_arm64"
+            echo "WIN10X64_TAG=Windows_10_${currentver}"
+          } >> "$GITHUB_ENV"
 
       - name: Run Tag Checks for Windows 11 x64 Releases
         uses: mukunku/tag-exists-action@v1.7.0

@@ -87,9 +87,11 @@ jobs:
       - name: Prepare release tag 🏷️
         id: releasetag
         run: |
-          currentver=${{ inputs.wsa_ver }}
-          echo "WSA_TAG=Windows_11_${currentver}_arm64" >> $GITHUB_ENV
-          echo "WSA_VER=$currentver" >> $GITHUB_ENV
+          currentver="${{ inputs.wsa_ver }}"
+          {
+            echo "WSA_TAG=Windows_11_${currentver}_arm64"
+            echo "WSA_VER=${currentver}"
+          } >> "$GITHUB_ENV"
 
       - name: Check GitHub ENV variables
         run: |

@@ -52,9 +52,7 @@ dirs_to_check = [
     os.path.expandvars(r'%LocalAppData%\Microsoft\WindowsApps\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe'),
     os.path.expandvars(r'%LocalAppData%\Packages\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe'),
     os.path.expandvars(r'C:\Windows\System32\config\systemprofile\AppData\Local\Packages\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe'),
-    os.path.expandvars(r'%LocalAppData%\Microsoft\WindowsApps\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe'),
-    os.path.expandvars(r'C:\ProgramData\Packages\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe'),
-    os.path.expandvars(r'%LocalAppData%\Local\Packages\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe')
+    os.path.expandvars(r'C:\ProgramData\Packages\MicrosoftCorporationII.WindowsSubsystemForAndroid_8wekyb3d8bbwe')
 ]
 
 def with_restore_point_creation_frequency(minutes, func):
@@ -152,15 +150,36 @@ def delete_folders_and_files(root_path):
                 print(f"Deleting file: {full_file_path}")
                 os.remove(full_file_path)    
 
+def get_shortcut_target(shortcut_path):
+    """Resolve a .lnk shortcut's real target via the WScript.Shell COM object.
+
+    os.path.realpath() does not resolve shortcuts, so PowerShell is used to
+    read the TargetPath of the shortcut instead.
+    """
+    ps_cmd = (f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{shortcut_path}');"
+              f" Write-Output $s.TargetPath")
+    try:
+        result = subprocess.run(
+            ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
+            capture_output=True, text=True, timeout=30)
+        return result.stdout.strip()
+    except Exception as exc:
+        print(f"Failed to resolve shortcut {shortcut_path}: {exc}")
+        return ""
+
+
 def delete_shortcuts(target_string, start_menu_dir):
     # Walk through the file system starting from the start_menu_dir
     for dirpath, dirnames, filenames in os.walk(start_menu_dir):
         for filename in filenames:
             full_file_path = os.path.join(dirpath, filename)
-            target_location = os.path.realpath(full_file_path)
+            target_location = get_shortcut_target(full_file_path)
             if target_string in target_location:
-                print(f"Deleting shortcut: {full_file_path}")
-                os.remove(full_file_path)
+                print(f"Deleting shortcut: {full_file_path} (target: {target_location})")
+                try:
+                    os.remove(full_file_path)
+                except OSError as exc:
+                    print(f"Failed to delete shortcut {full_file_path}: {exc}")
 
 
 

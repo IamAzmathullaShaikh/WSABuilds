@@ -1,0 +1,67 @@
+name: Lint
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '**/*.sh'
+      - '**/*.py'
+      - '**/*.ps1'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '**/*.sh'
+      - '**/*.py'
+      - '**/*.ps1'
+
+jobs:
+  actionlint:
+    name: Validate GitHub Actions workflows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install actionlint
+        run: |
+          curl -sSfL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o /tmp/actionlint.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp
+          sudo mv /tmp/actionlint /usr/local/bin/actionlint
+
+      - name: Run actionlint
+        run: actionlint
+
+  shellcheck:
+    name: ShellCheck bash scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: |
+          shellcheck -x -S warning \
+            MagiskOnWSA/scripts/*.sh \
+            MagiskOnWSA/libhoudini/houdini_installer.sh \
+            MagiskOnWSAOld/scripts/*.sh \
+            MagiskOnWSAOld/libhoudini/houdini_installer.sh
+
+  python:
+    name: Compile Python sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Compile Python sources
+        run: |
+          python3 -m compileall -q \
+            MagiskOnWSA/scripts \
+            "MagiskOnWSA/Update Check" \
+            MagiskOnWSAOld/scripts \
+            "WSABuilds Utilities/Update Script" \
+            "WSABuilds Utilities/Uninstall Script"

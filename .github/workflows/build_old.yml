@@ -21,7 +21,9 @@ on:
       wsa_ver:
         type: string  
       gappsver:
-        type: string  
+        type: string
+      release_type:
+        type: string
         
 jobs:
   build:
@@ -77,14 +79,9 @@ jobs:
         id: wsa
         working-directory: MagiskOnWSAOld
         run: |
-          if [[ "${{ inputs.release_type }}" == "WIF" ]]; then
-              RLS_TYPE="latest"
-          else
-              RLS_TYPE="retail"
-          fi
           chmod -R 777 ./
           mkdir -p download
-          ./scripts/build.sh --arch ${{ inputs.arch }} --release-type latest --magisk-ver ${{ inputs.magiskver }} --gapps-brand ${{ inputs.gappsver }} --root-sol ${{ inputs.root }} --custom-model ${{ inputs.devicemodel }} ${{ inputs.amazonflag }} --compress-format ${{ inputs.compressformat }}
+          ./scripts/build.sh --arch ${{ inputs.arch }} --release-type ${{ inputs.release_type }} --magisk-ver ${{ inputs.magiskver }} --gapps-brand ${{ inputs.gappsver }} --root-sol ${{ inputs.root }} --custom-model ${{ inputs.devicemodel }} ${{ inputs.amazonflag }} --compress-format ${{ inputs.compressformat }}
 
       - name: Install Houdini and Process Images 🔧
         working-directory: MagiskOnWSAOld
@@ -97,19 +94,14 @@ jobs:
         id: releasetag
         run: |
           currentver=${{ inputs.wsa_ver }}
-          folderpath="/WSABuilds/Builds/Windows Subsystem For Android™ v$currentver/Windows 11/Windows 11 x86_64"
-          folderpathwin10="/WSABuilds/Builds/Windows Subsystem For Android™ v$currentver/Windows 10/" 
-          echo "DRIVE_FOLDER_PATH=$folderpath" >> $GITHUB_ENV  
-          echo "DRIVE_FOLDER_PATH_WIN10=$folderpathwin10" >> $GITHUB_ENV 
           echo "WSA_TAG=Windows_11_$currentver" >> $GITHUB_ENV
           echo "WSA_TAG_WIN10=Windows_10_$currentver" >> $GITHUB_ENV
-          echo "WSA_VER=$currentver" >> $GITHUB_ENV 
+          echo "WSA_VER=$currentver" >> $GITHUB_ENV
 
       - name: Check GitHub ENV variables
         run: |
           echo ${{ steps.wsa.outputs.artifact }}
           echo ${{ steps.wsa.outputs.artifact_folder }}
-          echo ${{ steps.date.outputs.date }}
           echo ${{ steps.wsa.outputs.built }}
           echo ${{ env.WSA_TAG }}
           echo ${{ env.WSA_TAG_WIN10 }}
@@ -126,13 +118,10 @@ jobs:
     outputs:
       zipname: ${{ steps.wsa.outputs.artifact }}
       artifact_folder: ${{ steps.wsa.outputs.artifact_folder }}
-      date: ${{ steps.date.outputs.date }}
       built: ${{ steps.wsa.outputs.built }}
       tag: ${{ env.WSA_TAG }}
       tagwin10: ${{ env.WSA_TAG_WIN10 }}
       wsaver: ${{ env.WSA_VER }}
-      onedrivepath: ${{ env.DRIVE_FOLDER_PATH }}
-      onedrivepathwin10: ${{ env.DRIVE_FOLDER_PATH_WIN10 }}
 
   make-pri:
     name: Merge PRI resources
@@ -181,23 +170,12 @@ jobs:
       - name: Compress artifact for Windows 11 x64 Build📦
         run: 7z a -t7z -mx=6 -m0=LZMA2 -ms=on -mmt=8 -- "${{ needs.build.outputs.zipname }}.7z" .\output\*
 
-
-#      - name: Setup rclone 🎚️
-#        uses: AnimMouse/setup-rclone@v1.9.0
-#        with:
-#             rclone_config: ${{ secrets.RCLONE_CONFIG }}
-#
-#      - name: Upload build to OneDrive for Windows 11 x64 Build⏫
-#        run: |
-#           echo ${{ needs.build.outputs.onedrivepath }}
-#           rclone copy ${{ needs.build.outputs.zipname }}.7z OneDrive:"${{ needs.build.outputs.onedrivepath }}" --create-empty-src-dirs
-#        env:
-#           RCLONE_CONFIG_PASS: ${{ secrets.RCLONE_CONFIG_PASS }}
-
       - name: Upload Windows 11 x64 build to release 🤌
         uses: softprops/action-gh-release@v3
         with:
-          files: ${{ needs.build.outputs.zipname }}.7z
+          files: |
+            ${{ needs.build.outputs.zipname }}.7z
+            sha256-checksum.txt
           fail_on_unmatched_files: true
           append_body: false
           tag_name: ${{ needs.build.outputs.tag }}
@@ -211,39 +189,25 @@ jobs:
         
       - name: Run WSA Windows 10 PowerShell Patch Script
         run: |
-          Write-Output "`r`nPatching Windows 10 AppxManifest file..."
-          $outputDir = "${{ github.workspace }}\output\${{ needs.build.outputs.artifact_folder }}"
-          $xml = [xml](Get-Content "$outputDir\AppxManifest.xml")
-          $nsm = New-Object Xml.XmlNamespaceManager($xml.NameTable)
-          $nsm.AddNamespace('rescap', "http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities")
-          $nsm.AddNamespace('desktop6', "http://schemas.microsoft.com/appx/manifest/desktop/windows10/6")
-          $node = $xml.Package.Capabilities.SelectSingleNode("rescap:Capability[@Name='customInstallActions']", $nsm)
-          $xml.Package.Capabilities.RemoveChild($node) | Out-Null
-          $node = $xml.Package.Extensions.SelectSingleNode("desktop6:Extension[@Category='windows.customInstall']", $nsm)
-          $xml.Package.Extensions.RemoveChild($node) | Out-Null
-          $xml.Package.Dependencies.TargetDeviceFamily.MinVersion = "10.0.19041.264"
-          $xml.Save("$outputDir\AppxManifest.xml")
-          Write-Output "`r`nDownloading modifided DLL file..."
-          $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri "https://github.com/MustardChef/WSAPatch/raw/main/DLLs%20for%20WSABuilds/winhttp.dll" -OutFile "$outputDir\WSAClient\winhttp.dll"
-          Invoke-WebRequest -Uri "https://github.com/MustardChef/WSAPatch/raw/main/DLLs%20for%20WSABuilds/WsaPatch.dll" -OutFile "$outputDir\WSAClient\WsaPatch.dll"
-          Invoke-WebRequest -Uri "https://github.com/MustardChef/WSAPatch/raw/main/DLLs%20for%20WSABuilds/icu.dll" -OutFile "$outputDir\WSAClient\icu.dll"
+          & "${{ github.workspace }}\MagiskOnWSA\Update Check\windows10patch.ps1" -OutputDir "${{ github.workspace }}\output\${{ needs.build.outputs.artifact_folder }}"
         shell: pwsh
 
       - name: Compress artifact for Windows 10 x64 Build📦
         run: 7z a -t7z -mx=6 -m0=LZMA2 -ms=on -mmt=8 -sdel -- "${{ needs.build.outputs.zipname }}_Windows_10.7z" .\output\*
 
-#      - name: Upload build to OneDrive for Windows 10 x64 Build⏫
-#        run: |
-#              echo ${{ needs.build.outputs.onedrivepathwin10 }}
-#              rclone copy ${{ needs.build.outputs.zipname }}_Windows_10.7z OneDrive:"${{ needs.build.outputs.onedrivepathwin10 }}" --create-empty-src-dirs
-#        env:
-#           RCLONE_CONFIG_PASS: ${{ secrets.RCLONE_CONFIG_PASS }}
-        
+      - name: Generate SHA-256 checksums ✔️
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path . -Filter *.7z | ForEach-Object {
+              $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+              "$hash  $($_.Name)"
+          } | Out-File -FilePath sha256-checksum.txt -Encoding utf8        
       - name: Upload Windows 10 x64 build to release 🤌
         uses: softprops/action-gh-release@v3
         with:
-          files: ${{ needs.build.outputs.zipname }}_Windows_10.7z
+          files: |
+            ${{ needs.build.outputs.zipname }}_Windows_10.7z
+            sha256-checksum.txt
           fail_on_unmatched_files: true
           append_body: false
           tag_name: ${{ needs.build.outputs.tagwin10 }}

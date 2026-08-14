@@ -722,7 +722,7 @@ if [[ "$ROOT_SOL" == "none" ]]; then
     if [ "$REMOVE_AMAZON" = "yes" ]; then
         buildName+="-RemovedAmazon"
     fi    
-    sudo sed -i "/Start-Process \"wsa:\/\/com.android.settings\"/a\ \ \ \ # $buildName" ../installer/Install.ps1 
+    sudo sed -i "/Start-Process \"wsa:\/\/com.android.settings\"/a\ \ \ \ # $buildName" "../installer/$ARCH/Install.ps1" 
 elif [ "$ROOT_SOL" == "magisk" ]; then
     rootInfo="-with-magisk-$MAGISK_VERSION_NAME($MAGISK_VERSION_CODE)-$MAGISK_VER"
     if [ "$GAPPS_BRAND" = "none" ]; then
@@ -734,7 +734,7 @@ elif [ "$ROOT_SOL" == "magisk" ]; then
     if [ "$REMOVE_AMAZON" = "yes" ]; then
         buildName+="-RemovedAmazon"
     fi    
-    sudo sed -i "/Start-Process \"wsa:\/\/com.android.settings\"/a\ \ \ \ # $buildName" ../installer/Install.ps1 
+    sudo sed -i "/Start-Process \"wsa:\/\/com.android.settings\"/a\ \ \ \ # $buildName" "../installer/$ARCH/Install.ps1" 
 elif [ "$ROOT_SOL" == "kernelsu" ]; then  
     rootInfo="-with-kernelsu-$KERNELSU_VER"
     if [ "$GAPPS_BRAND" = "none" ]; then
@@ -746,25 +746,25 @@ elif [ "$ROOT_SOL" == "kernelsu" ]; then
     if [ "$REMOVE_AMAZON" = "yes" ]; then
         buildName+="-RemovedAmazon"
     fi    
-    sudo sed -i "/Start-Process \"wsa:\/\/com.android.settings\"/a\ \ \ \ # $buildName" ../installer/Install.ps1 
+    sudo sed -i "/Start-Process \"wsa:\/\/com.android.settings\"/a\ \ \ \ # $buildName" "../installer/$ARCH/Install.ps1" 
 fi
 if [[ "$ROOT_SOL" = "none" ]] && [[ "$GAPPS_BRAND" = "none" ]] && [[ "$REMOVE_AMAZON" == "yes" ]]; then
-    sudo sed -i -e 's@Start-Process\ "wsa://com.topjohnwu.magisk"@@g' ../installer/Install.ps1
-    sudo sed -i -e 's@Start-Process\ "wsa://com.android.vending"@@g' ../installer/Install.ps1 
+    sudo sed -i -e 's@Start-Process\ "wsa://com.topjohnwu.magisk"@@g' "../installer/$ARCH/Install.ps1"
+    sudo sed -i -e 's@Start-Process\ "wsa://com.android.vending"@@g' "../installer/$ARCH/Install.ps1" 
 else
     if [[ "$ROOT_SOL" == "none" ]]; then
-        sed -i -e 's@Start-Process "wsa://com.topjohnwu.magisk"@@g' ../installer/Install.ps1
+        sed -i -e 's@Start-Process "wsa://com.topjohnwu.magisk"@@g' "../installer/$ARCH/Install.ps1"
     elif [[ "$ROOT_SOL" = "kernelsu" ]]; then
         sed -i -e 's@wsa://com.topjohnwu.magisk@https://github.com/MustardChef/WSABuilds/blob/585e9df757ed135dce504725c9e386a6ce6419ce/Documentation/Usage%20Guides/General%20Usage%20Guides/KernelSU.md@g' "../installer/$ARCH/Install.ps1"
     elif [[ "$MAGISK_VER" = "delta" ]]; then
-        sed -i -e 's@com.topjohnwu.magisk@io.github.huskydg.magisk@g' ../installer/Install.ps1
+        sed -i -e 's@com.topjohnwu.magisk@io.github.huskydg.magisk@g' "../installer/$ARCH/Install.ps1"
     elif [[ "$MAGISK_VER" = "alpha" ]]; then
-        sed -i -e 's@com.topjohnwu.magisk@io.github.vvb2060.magisk@g' ../installer/Install.ps1
+        sed -i -e 's@com.topjohnwu.magisk@io.github.vvb2060.magisk@g' "../installer/$ARCH/Install.ps1"
     fi
     if [[ "$GAPPS_BRAND" = "none" ]] && [[ "$REMOVE_AMAZON" != "yes" ]]; then
-        sed -i -e 's@com.android.vending@com.amazon.venezia@g' ../installer/Install.ps1
+        sed -i -e 's@com.android.vending@com.amazon.venezia@g' "../installer/$ARCH/Install.ps1"
     elif [[ "$GAPPS_BRAND" = "none" ]]; then
-        sed -i -e 's@Start-Process\ "wsa://com.android.vending"@@g' ../installer/Install.ps1
+        sed -i -e 's@Start-Process\ "wsa://com.android.vending"@@g' "../installer/$ARCH/Install.ps1"
     fi  
 fi  
 cp "../installer/$ARCH/Install.ps1" "$WORK_DIR/wsa/$ARCH" || abort

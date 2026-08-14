@@ -480,7 +480,7 @@ if [ "$ROOT_SOL" = "magisk" ]; then
         fi
         # shellcheck disable=SC1090
         source "$WSA_WORK_ENV" || abort
-        if [ "$MAGISK_VERSION_CODE" -lt 26000 ] && [ "$MAGISK_VER" != "stable" ] && [ -z ${CUSTOM_MAGISK+x} ]; then
+        if [ -n "$MAGISK_VERSION_CODE" ] && [ "$MAGISK_VERSION_CODE" -lt 26000 ] && [ "$MAGISK_VER" != "stable" ] && [ -z ${CUSTOM_MAGISK+x} ]; then
             abort "Please install Magisk 26.0+"
         fi
         chmod +x "$WORK_DIR/magisk/magiskboot" || abort

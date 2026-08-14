@@ -81,7 +81,6 @@ with zipfile.ZipFile(wsa_zip_path) as zip:
                 print(f"unzipping {zip_name} to {workdir}", flush=True)
                 zip_path = zip.extract(f, workdir)
                 with zipfile.ZipFile(zip_path) as wsa_zip:
-                    stat = Path(zip_path).stat()
                     print(f"unzipping from {zip_path}", flush=True)
                     wsa_zip.extractall(archdir)
                 ver_no = zip_name.split("_")

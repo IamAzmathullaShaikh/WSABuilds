@@ -35,6 +35,7 @@ tempScript = sys.argv[3]
 print(f"Generating Magisk download link: release type={magisk_ver}", flush=True)
 if not magisk_ver:
     magisk_ver = "stable"
+magisk_link = ""
 if magisk_ver == "stable" or magisk_ver == "beta" or magisk_ver == "canary" or magisk_ver == "debug":
     try:
         magisk_link = json.loads(requests.get(
@@ -57,6 +58,11 @@ elif magisk_ver == "alpha":
             f"https://install.appcenter.ms/api/v0.1/apps/vvb2060/magisk/distribution_groups/public/releases/latest?is_install_page=true", headers=headers).content)['download_url']
     except Exception:
         print("Failed to fetch from AppCenter API...")
+else:
+    print(f"Unsupported Magisk release type: {magisk_ver}", flush=True)
+if not magisk_link:
+    print(f"Error: Failed to resolve a download link for Magisk {magisk_ver}", flush=True)
+    exit(1)
 print(f"download link: {magisk_link}", flush=True)
 
 with open(download_dir/tempScript, 'a') as f:

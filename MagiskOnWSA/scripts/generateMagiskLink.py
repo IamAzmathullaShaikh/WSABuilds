@@ -51,7 +51,7 @@ print(
     f"Generating Magisk download link: release type={magisk_ver}", flush=True)
 if not magisk_ver:
     magisk_ver = "stable"
-if magisk_ver == "stable" or magisk_ver == "beta" or magisk_ver == "canary" or magisk_ver == "debug":
+if magisk_ver in ("stable", "beta", "canary", "debug"):
     try:
         magisk_link = json.loads(requests.get(
             f"https://github.com/topjohnwu/magisk-files/raw/master/{magisk_ver}.json").content)['magisk']['link']
@@ -61,25 +61,29 @@ if magisk_ver == "stable" or magisk_ver == "beta" or magisk_ver == "canary" or m
         magisk_link = json.loads(requests.get(
             f"https://fastly.jsdelivr.net/gh/topjohnwu/magisk-files@master/{magisk_ver}.json").content)['magisk']['link']
         download_files[f"magisk-{magisk_ver}.zip"] = magisk_link
+else:
+    print(f"Unsupported Magisk release type: {magisk_ver}", flush=True)
+    exit(1)
 res = requests.get(
     f"https://api.github.com/repos/LSPosed/WSA-Addon/releases/latest", auth=github_auth)
 json_data = json.loads(res.content)
-headers = res.headers
-x_ratelimit_remaining = headers["x-ratelimit-remaining"]
 if res.status_code == 200:
     assets = json_data["assets"]
     for asset in assets:
         if re.match(f'cust.img$', asset["name"]):
             download_files[asset["name"]] = asset["browser_download_url"]
             break
-
-elif res.status_code == 403 and x_ratelimit_remaining == '0':
+elif res.status_code == 403 and res.headers.get("x-ratelimit-remaining") == '0':
     message = json_data["message"]
     print(f"Github API Error: {message}", flush=True)
-    ratelimit_reset = headers["x-ratelimit-reset"]
-    ratelimit_reset = datetime.fromtimestamp(int(ratelimit_reset))
-    print(
-        f"The current rate limit window resets in {ratelimit_reset}", flush=True)
+    ratelimit_reset = res.headers.get("x-ratelimit-reset")
+    if ratelimit_reset:
+        ratelimit_reset = datetime.fromtimestamp(int(ratelimit_reset))
+        print(
+            f"The current rate limit window resets in {ratelimit_reset}", flush=True)
+    exit(1)
+else:
+    print(f"Github API Error: {res.status_code} - {json_data.get('message', '')}", flush=True)
     exit(1)
 with open(download_dir/tempScript, 'a') as f:
     for key, value in download_files.items():

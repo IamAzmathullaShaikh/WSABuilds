@@ -64,7 +64,7 @@ tempScript = sys.argv[4]
 cat_id = '858014f3-3934-4abe-8078-4aa193e74ca8'
 user = ''
 session = Session()
-session.verify = False
+session.verify = True
 if ms_account_conf.is_file():
     with open(ms_account_conf, "r") as f:
         conf = Prop(f.read())

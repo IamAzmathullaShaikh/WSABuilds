@@ -45,10 +45,12 @@ release_type = "WIF"
 new_version_found = False
 
 session = Session()
-session.verify = False
+session.verify = True
 
+# Create the update branch from the current HEAD instead of discarding the
+# whole working tree with an orphan branch when the branch does not exist yet.
 git = (
-    "git checkout -f update || git switch --discard-changes --orphan update"
+    "git checkout -f update 2>/dev/null || git checkout -b update"
 )
 
 def MagiskandGappsChecker(type):

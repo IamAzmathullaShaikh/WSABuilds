@@ -20,6 +20,7 @@
 
 from datetime import datetime
 import sys
+import os
 
 import requests
 import json
@@ -53,8 +54,6 @@ android_api_map = {"30": "11.0", "32": "12.1", "33": "13.0"}
 release = android_api_map[android_api]
 res = requests.get(f"https://api.github.com/repos/LSPosed/WSA-Addon/releases/latest", auth=github_auth)
 json_data = json.loads(res.content)
-headers = res.headers
-x_ratelimit_remaining = headers["x-ratelimit-remaining"]
 if res.status_code == 200:
     download_files = {}
     assets = json_data["assets"]
@@ -69,11 +68,22 @@ if res.status_code == 200:
             f.writelines(value + '\n')
             f.writelines(f'  dir={download_dir}\n')
             f.writelines(f'  out={key}\n')
-elif res.status_code == 403 and x_ratelimit_remaining == '0':
+    # Record which WSA-Addon release the GApps artifacts came from so the
+    # resolved version can be traced back to the build (release notes track
+    # upstream MindTheGapps separately via Update Check/MTGUpdateCheck.py).
+    env_path = os.environ.get('WSA_WORK_ENV')
+    if env_path and os.path.isfile(env_path):
+        with open(env_path, 'a') as env_file:
+            env_file.write(f"GAPPS_ADDON_TAG={json_data.get('tag_name', '')}\n")
+elif res.status_code == 403 and res.headers.get("x-ratelimit-remaining") == '0':
     message = json_data["message"]
     print(f"Github API Error: {message}", flush=True)
-    ratelimit_reset = headers["x-ratelimit-reset"]
-    ratelimit_reset = datetime.fromtimestamp(int(ratelimit_reset))
-    print(
-        f"The current rate limit window resets in {ratelimit_reset}", flush=True)
+    ratelimit_reset = res.headers.get("x-ratelimit-reset")
+    if ratelimit_reset:
+        ratelimit_reset = datetime.fromtimestamp(int(ratelimit_reset))
+        print(
+            f"The current rate limit window resets in {ratelimit_reset}", flush=True)
+    exit(1)
+else:
+    print(f"Github API Error: {res.status_code} - {json_data.get('message', '')}", flush=True)
     exit(1)

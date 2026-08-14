@@ -56,8 +56,10 @@ file_name = sys.argv[5]
 abi_map = {"x64": "x86_64", "arm64": "arm64"}
 print(
     f"Generating KernelSU download link: arch={abi_map[arch]}, kernel version={kernelVersion}", flush=True)
+# Use the latest KernelSU release instead of a hardcoded tag so KernelSU
+# builds do not silently stay pinned to an old version.
 res = requests.get(
-    f"https://api.github.com/repos/tiann/KernelSU/releases/tags/v2.1.2")
+    f"https://api.github.com/repos/tiann/KernelSU/releases/latest")
 json_data = json.loads(res.content)
 headers = res.headers
 x_ratelimit_remaining = headers["x-ratelimit-remaining"]
@@ -69,7 +71,7 @@ if res.status_code == 200:
         asset_name = asset["name"]
         if re.match(rf'kernel-WSA-{abi_map[arch]}-{kernelVersion}.*\.zip$', asset_name) and asset["content_type"] == "application/zip":
             tmp_kernel_ver = re.search(
-                u'\d{1}.\d{1,}.\d{1,}.\d{1,}', asset_name.split("-")[3]).group()
+                r'\d{1}\.\d{1,}\.\d{1,}\.\d{1,}', asset_name.split("-")[3]).group()
             if (kernel_ver == 0):
                 kernel_ver = tmp_kernel_ver
             elif version.parse(kernel_ver) < version.parse(tmp_kernel_ver):

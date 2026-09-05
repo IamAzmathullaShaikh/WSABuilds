@@ -1,96 +1,204 @@
 #!/usr/bin/python3
+# =============================================================================
+# fixGappsProp.py — Patch WSA build.prop files for GApps compatibility
 #
-# This file is part of MagiskOnWSALocal.
+# Google Play Services performs device certification checks using the values in
+# /system/build.prop and /vendor/build.prop.  This script:
 #
-# MagiskOnWSALocal is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as
-# published by the Free Software Foundation, either version 3 of the
-# License, or (at your option) any later version.
+#   1. Sets brand/manufacturer to Google (required for GApps to activate)
+#   2. Sets product/device/model to the spoofed device model (redfin = Pixel 5)
+#   3. Recomputes ro.build.description and ro.build.fingerprint consistently
+#   4. Stamps the build with the GApps variant name (pico) for diagnostics
 #
-# MagiskOnWSALocal is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
+# Usage:
+#   python3 fixGappsProp.py <output_dir> <device_name> <device_model> [gapps_variant]
 #
-# You should have received a copy of the GNU Affero General Public License
-# along with MagiskOnWSALocal.  If not, see <https://www.gnu.org/licenses/>.
+# Arguments:
+#   output_dir      Path to the WSA output directory (contains system/, vendor/)
+#   device_name     Android device codename, e.g. "redfin"
+#   device_model    Android device model string, e.g. "Pixel 5"
+#   gapps_variant   GApps variant label, e.g. "pico"  (default: pico)
 #
-# Copyright (C) 2023 LSPosed Contributors
-#
+# Copyright (C) 2024 WSABuilds Contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# =============================================================================
 
 from __future__ import annotations
-from io import TextIOWrapper
-from typing import OrderedDict
-from pathlib import Path
+
 import sys
+from io import TextIOWrapper
+from pathlib import Path
+from typing import Any, OrderedDict
+
+
+# ---------------------------------------------------------------------------
+# Prop — Android .prop file parser / serialiser
+# ---------------------------------------------------------------------------
+
 class Prop(OrderedDict):
+    """Parse and round-trip Android .prop files, preserving comment lines."""
+
     def __init__(self, file: TextIOWrapper) -> None:
         super().__init__()
-        for i, line in enumerate(file.read().splitlines(False)):
-            if '=' in line:
-                k, v = line.split('=', 1)
-                self[k] = v
+        for idx, line in enumerate(file.read().splitlines(keepends=False)):
+            if "=" in line:
+                key, _, value = line.partition("=")
+                self[key] = value
             else:
-                self[f".{i}"] = line
+                self[f".{idx}"] = line
 
     def __str__(self) -> str:
-        return '\n'.join([v if k.startswith('.') else f"{k}={v}" for k, v in self.items()])
+        return "\n".join(
+            v if k.startswith(".") else f"{k}={v}"
+            for k, v in self.items()
+        )
 
-    def __iadd__(self, other: str) -> Prop:
-        self[f".{len(self)}"] = other
+    def __iadd__(self, comment: str) -> "Prop":
+        """Append a bare comment / blank line."""
+        self[f".{len(self)}"] = comment
         return self
 
-new_props = {
-    ("product", "brand"): "google",
-    ("system", "brand"): "google",
-    ("product", "manufacturer"): "Google",
-    ("system", "manufacturer"): "Google",
-    ("build", "product"): sys.argv[2],
-    ("product", "name"): sys.argv[2],
-    ("system", "name"): sys.argv[2],
-    ("product", "device"): sys.argv[2],
-    ("system", "device"): sys.argv[2],
-    ("product", "model"): sys.argv[3],
-    ("system", "model"): sys.argv[3],
-    ("build", "flavor"): sys.argv[2] + "-user"
-}
-
-def description(sec: str, p: Prop) -> str:
-    return f"{p[f'ro.{sec}.build.flavor']} {p[f'ro.{sec}.build.version.release_or_codename']} {p[f'ro.{sec}.build.id']} {p[f'ro.{sec}.build.version.incremental']} {p[f'ro.{sec}.build.tags']}"
+    def get_safe(self, key: str, default: str = "") -> str:
+        """Return value for key or default — never raises KeyError."""
+        return self.get(key, default)
 
 
-def fingerprint(sec: str, p: Prop) -> str:
-    return f"""{p[f"ro.product.{sec}.brand"]}/{p[f"ro.product.{sec}.name"]}/{p[f"ro.product.{sec}.device"]}:{p[f"ro.{sec}.build.version.release"]}/{p[f"ro.{sec}.build.id"]}/{p[f"ro.{sec}.build.version.incremental"]}:{p[f"ro.{sec}.build.type"]}/{p[f"ro.{sec}.build.tags"]}"""
+# ---------------------------------------------------------------------------
+# Fingerprint / description helpers
+# ---------------------------------------------------------------------------
+
+def _description(section: str, p: Prop) -> str:
+    """Reconstruct ro.<section>.build.description from component fields."""
+    parts = [
+        p.get_safe(f"ro.{section}.build.flavor"),
+        p.get_safe(f"ro.{section}.build.version.release_or_codename"),
+        p.get_safe(f"ro.{section}.build.id"),
+        p.get_safe(f"ro.{section}.build.version.incremental"),
+        p.get_safe(f"ro.{section}.build.tags"),
+    ]
+    return " ".join(parts)
 
 
-def fix_prop(sec, prop):
-    if not Path(prop).is_file():
+def _fingerprint(section: str, p: Prop) -> str:
+    """Reconstruct ro.<section>.build.fingerprint from component fields."""
+    brand   = p.get_safe(f"ro.product.{section}.brand")
+    name    = p.get_safe(f"ro.product.{section}.name")
+    device  = p.get_safe(f"ro.product.{section}.device")
+    release = p.get_safe(f"ro.{section}.build.version.release")
+    build_id = p.get_safe(f"ro.{section}.build.id")
+    incremental = p.get_safe(f"ro.{section}.build.version.incremental")
+    build_type  = p.get_safe(f"ro.{section}.build.type")
+    tags        = p.get_safe(f"ro.{section}.build.tags")
+    return f"{brand}/{name}/{device}:{release}/{build_id}/{incremental}:{build_type}/{tags}"
+
+
+# ---------------------------------------------------------------------------
+# Core patcher
+# ---------------------------------------------------------------------------
+
+def _fix_prop(
+    section: str,
+    prop_path: str,
+    device_name: str,
+    device_model: str,
+    gapps_variant: str,
+) -> None:
+    """Apply GApps-compatibility patches to a single build.prop file."""
+    path = Path(prop_path)
+
+    if not path.is_file():
+        print(
+            f"fixGappsProp: skipping missing file — {prop_path}",
+            flush=True,
+        )
         return
 
-    print(f"fixing {prop}", flush=True)
-    with open(prop, 'r') as f:
+    print(f"fixGappsProp: patching {prop_path} …", flush=True)
+
+    with open(path, "r") as f:
         p = Prop(f)
 
-    p += "# extra props added by MagiskOnWSA and YT-Advanced/WSA-Script"
+    # ── Annotation banner ────────────────────────────────────────────────────
+    p += ""
+    p += "# ── Extra props added by WSABuilds fixGappsProp.py ────────────────"
+    p += f"# GApps variant : {gapps_variant}"
+    p += f"# Device        : {device_name} / {device_model}"
 
-    for k, v in new_props.items():
-        p[f"ro.{k[0]}.{k[1]}"] = v
+    # ── Brand / manufacturer spoofing ────────────────────────────────────────
+    # Play Services uses these to verify the device is a Google device.
+    google_props: dict[tuple[str, str], str] = {
+        ("product",  "brand"):        "google",
+        ("system",   "brand"):        "google",
+        ("product",  "manufacturer"): "Google",
+        ("system",   "manufacturer"): "Google",
+        ("build",    "product"):      device_name,
+        ("product",  "name"):         device_name,
+        ("system",   "name"):         device_name,
+        ("product",  "device"):       device_name,
+        ("system",   "device"):       device_name,
+        ("product",  "model"):        device_model,
+        ("system",   "model"):        device_model,
+        ("build",    "flavor"):       f"{device_name}-user",
+    }
 
-        if k[0] == "build":
-            p[f"ro.{sec}.{k[0]}.{k[1]}"] = v
-        elif k[0] == "product":
-            p[f"ro.{k[0]}.{sec}.{k[1]}"] = v
+    for (namespace, key), value in google_props.items():
+        p[f"ro.{namespace}.{key}"] = value
 
-    p["ro.build.description"] = description(sec, p)
-    p[f"ro.build.fingerprint"] = fingerprint(sec, p)
-    p[f"ro.{sec}.build.description"] = description(sec, p)
-    p[f"ro.{sec}.build.fingerprint"] = fingerprint(sec, p)
-    p[f"ro.bootimage.build.fingerprint"] = fingerprint(sec, p)
+        # Duplicate into the per-section namespace that GApps also reads
+        if namespace == "build":
+            p[f"ro.{section}.{namespace}.{key}"] = value
+        elif namespace == "product":
+            p[f"ro.{namespace}.{section}.{key}"] = value
 
-    with open(prop, 'w') as f:
+    # ── GApps variant diagnostic stamp ──────────────────────────────────────
+    p["ro.gapps.variant"] = gapps_variant
+
+    # ── Fingerprint / description rebuild ────────────────────────────────────
+    desc  = _description(section, p)
+    fprint = _fingerprint(section, p)
+
+    p["ro.build.description"]                = desc
+    p["ro.build.fingerprint"]               = fprint
+    p[f"ro.{section}.build.description"]    = desc
+    p[f"ro.{section}.build.fingerprint"]    = fprint
+    p["ro.bootimage.build.fingerprint"]     = fprint
+
+    with open(path, "w") as f:
         f.write(str(p))
 
+    print(f"fixGappsProp: done — {path.name}", flush=True)
 
-sys_path = sys.argv[1]
-for sec, prop in {"system": sys_path+"/system/build.prop", "vendor": sys_path+"/vendor/build.prop", "odm": sys_path+"/vendor/odm/etc/build.prop", "vendor_dlkm": sys_path+"/vendor/vendor_dlkm/etc/build.prop"}.items():
-    fix_prop(sec, prop)
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    if len(sys.argv) < 4:
+        print(
+            "Usage: fixGappsProp.py <output_dir> <device_name> <device_model> [gapps_variant]",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    sys_path      = sys.argv[1]
+    device_name   = sys.argv[2]
+    device_model  = sys.argv[3]
+    gapps_variant = sys.argv[4] if len(sys.argv) > 4 else "pico"
+
+    # Map of section → prop file path (relative to sys_path)
+    prop_files: dict[str, str] = {
+        "system":      f"{sys_path}/system/build.prop",
+        "vendor":      f"{sys_path}/vendor/build.prop",
+        "odm":         f"{sys_path}/vendor/odm/etc/build.prop",
+        "vendor_dlkm": f"{sys_path}/vendor/vendor_dlkm/etc/build.prop",
+    }
+
+    for section, prop_path in prop_files.items():
+        _fix_prop(section, prop_path, device_name, device_model, gapps_variant)
+
+    print("fixGappsProp: all prop files patched.", flush=True)
+
+
+if __name__ == "__main__":
+    main()

@@ -69,8 +69,6 @@ if not Path(workdir).is_dir():
 
 if not Path(archdir).is_dir():
     archdir.mkdir()
-uid = os.getuid()
-workdir_rw = os.access(workdir, os.W_OK)
 
 with zipfile.ZipFile(wsa_zip_path) as zip:
     for f in zip.filelist:
@@ -95,7 +93,7 @@ with zipfile.ZipFile(wsa_zip_path) as zip:
                     env.WSA_MAJOR_VER = major_ver
                     env.WSA_REL = rel_long
                 with open(env_file, 'w') as environ_file:
-                    environ_file.write(str(env))
+                    environ_file.write(str(env) + '\n')
         if 'language' in filename_lower or 'scale' in filename_lower:
             name = f.filename.split("_")[2].split(".")[0]
             zip.extract(f, workdir)

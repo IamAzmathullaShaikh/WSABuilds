@@ -1,5 +1,47 @@
+# =============================================================================
+# sepolicy.rule — Additional SELinux rules for Magisk + OpenGApps Pico on WSA
+#
+# These rules are injected by Magisk's policy patching mechanism at boot.
+# They grant permissions that Google Play Services (gmscore) requires to
+# function correctly inside the WSA (Windows Subsystem for Android) container.
+#
+# Rules are in the form:
+#   allow <source_type> <target_type> <object_class> { <permissions> }
+#
+# Copyright (C) 2024 WSABuilds Contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# =============================================================================
+
+# ── vsock networking ─────────────────────────────────────────────────────────
+# Play Services uses vsock (AF_VSOCK) for communication with the host VM layer.
+# Without create/connect, GMS crashes silently at init.
 allow gmscore_app gmscore_app vsock_socket { create connect write read }
+
+# ── Runtime config properties ────────────────────────────────────────────────
+# GMS reads native boot config properties to determine feature flags.
+# Missing read permission causes property fetch timeouts.
 allow gmscore_app device_config_runtime_native_boot_prop file read
+
+# ── system_server tmpfs access ───────────────────────────────────────────────
+# Play Store and GMS IPC paths resolve through system_server's tmpfs.
+# dir:search is needed to traverse the directory.
+# file:open is needed to open individual socket / pipe entries.
 allow gmscore_app system_server_tmpfs dir search
 allow gmscore_app system_server_tmpfs file open
+
+# ── Filesystem attribute queries ─────────────────────────────────────────────
+# GMS queries statvfs() on tmpfs and media_rw_data_file to report
+# free storage space (used in account setup and Play Store downloads).
 allow gmscore_app { system_server_tmpfs media_rw_data_file } filesystem getattr
+
+# ── OpenGApps Pico: Phonesky (Play Store) ────────────────────────────────────
+# Play Store (com.android.vending) needs to read its own APK from the
+# overlaid GApps partition and write to its private data directory.
+allow priv_app system_file dir { read search getattr }
+allow priv_app system_file file { read getattr open execute execute_no_trans }
+
+# ── OpenGApps Pico: Google Services Framework ────────────────────────────────
+# GSF must be able to bind to its own binder service and communicate
+# with gmscore over the binder IPC.
+allow system_server gmscore_app binder { call transfer }
+allow gmscore_app system_server binder { call transfer }

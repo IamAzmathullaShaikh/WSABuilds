@@ -1,173 +1,248 @@
-name: Auto Build function (Use for call only)
+# =============================================================================
+# build.yml — Reusable build workflow for WSABuilds
+#
+# Target (locked):
+#   Architecture  : x64
+#   WSA channel   : retail
+#   Root solution : Magisk Stable
+#   GApps         : OpenGApps Pico
+#   Amazon        : kept
+#   Output        : Windows 11 x64 7z artifact
+#
+# This workflow is called (workflow_call) by update.yml.
+# It does NOT accept arch/root/gapps inputs — they are hard-coded in build.sh.
+#
+# Inputs (caller-provided):
+#   wsa_ver   (string) WSA version string, e.g. "2311.40000.4.0"
+#   wsa_message  (string) Human-readable release description for the tag
+#
+# Outputs:
+#   zipname          Full artifact name
+#   artifact_folder  Short folder name (WSA_<ver>_x64)
+#   built            UTC build timestamp (YYYYmmddHHMMSS)
+#   tag              GitHub release tag  (Windows_11_<ver>)
+#   wsaver           WSA version string
+# =============================================================================
+
+name: Build WSA x64 — Magisk Stable + OpenGApps Pico
+
 on:
   workflow_call:
     inputs:
-      arch:
-        type: string
-      gapps:
-        type: string
-      root:
-        type: string
-      insider:
-        type: string
-      magiskver:
-        type: string
-      devicemodel:
-        type: string
-      amazonflag:
-        type: string
-      compressformat:
-        type: string
       wsa_ver:
         type: string
-      gappsver:
+        required: true
+        description: WSA version string
+      wsa_message:
         type: string
-      release_type:
-        type: string
+        required: false
+        description: Human-readable release note prefix
+
+    outputs:
+      zipname:
+        description: Full artifact name (used for 7z file and release asset name)
+        value: ${{ jobs.build.outputs.zipname }}
+      artifact_folder:
+        description: Short output folder name (WSA_<ver>_x64)
+        value: ${{ jobs.build.outputs.artifact_folder }}
+      built:
+        description: UTC build timestamp
+        value: ${{ jobs.build.outputs.built }}
+      tag:
+        description: GitHub release tag (Windows_11_<ver>)
+        value: ${{ jobs.build.outputs.tag }}
+      wsaver:
+        description: WSA version string
+        value: ${{ jobs.build.outputs.wsaver }}
+
+# =============================================================================
+# Jobs
+# =============================================================================
 
 jobs:
+
+  # ---------------------------------------------------------------------------
+  # build — Linux runner: pull WSA, patch with Magisk + Pico GApps
+  # ---------------------------------------------------------------------------
   build:
-    name: Build WSA
+    name: Build WSA x64 (Magisk Stable + Pico GApps)
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout ♻️
-        uses: actions/checkout@v7
+      - name: Checkout repository ♻️
+        uses: actions/checkout@v4
 
-      - name: Setup Python 🏭
-        uses: actions/setup-python@v6
+      # ── Python setup ──────────────────────────────────────────────────────
+      - name: Setup Python 🐍
+        uses: actions/setup-python@v5
         with:
+          python-version: "3.x"
           check-latest: true
-          python-version: '3.x'
-          cache: 'pip'
-          cache-dependency-path: MagiskOnWSA/scripts/
+          cache: pip
+          cache-dependency-path: MagiskOnWSA/scripts/requirements.txt
 
-      - name: Setup Python3 Virtual Enviroment 🐍
+      - name: Create Python virtual environment 🏭
         working-directory: MagiskOnWSA/scripts
         run: |
-          sudo apt-get update
+          sudo apt-get update -qq
           PYTHON_VENV_DIR="$(dirname "$PWD")/python3-env"
-          python3 -m venv "$PYTHON_VENV_DIR" || abort "Failed to create python3 virtual env"
+          python3 -m venv "$PYTHON_VENV_DIR" \
+            || { echo "ERROR: Failed to create Python venv"; exit 1; }
           # shellcheck disable=SC1091
-          source "$PYTHON_VENV_DIR/bin/activate" || abort "Failed to activate python3 virtual env"
-          python3 -c "import pkg_resources; pkg_resources.require(open('requirements.txt',mode='r'))" &>/dev/null || {
-              echo "Installing Python3 dependencies"
-              python3 -m pip install --upgrade -r requirements.txt || abort "Failed to install python3 dependencies"
+          source "$PYTHON_VENV_DIR/bin/activate" \
+            || { echo "ERROR: Failed to activate Python venv"; exit 1; }
+          python3 -c "
+          import pkg_resources
+          pkg_resources.require(open('requirements.txt').read().splitlines())
+          " &>/dev/null || {
+            echo "Installing Python dependencies …"
+            python3 -m pip install --upgrade -r requirements.txt \
+              || { echo "ERROR: pip install failed"; exit 1; }
           }
           deactivate
 
-      - name: Install Ubuntu Dependencies 🧑‍🏭
+      # ── Ubuntu system dependencies ─────────────────────────────────────────
+      - name: Install system dependencies 🧑‍🏭
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
+          # e2fsprogs  — mkfs.ext4, img2simg (GApps image creation)
+          # attr       — setfattr / getfattr (WSA image manipulation)
+          # unzip      — extract OpenGApps ZIP
+          # qemu-utils — qemu-img (disk image conversion, optional)
+          # python3-venv — venv support
+          # curl       — fallback downloads
+          # xmlstarlet — XML manipulation for WSA manifests
           packages: e2fsprogs attr unzip qemu-utils python3-venv curl xmlstarlet
-          version: 1.0
+          version: 1.1
 
-      - name: Build WSA ${{ inputs.arch }} with GApps ${{ inputs.root }} 🏗️
+      # ── Core build step ───────────────────────────────────────────────────
+      - name: Build WSA x64 — Magisk Stable + Pico GApps 🏗️
         id: wsa
         working-directory: MagiskOnWSA
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod -R 777 ./
           mkdir -p download
-          ./scripts/build.sh --arch ${{ inputs.arch }} --release-type ${{ inputs.release_type }} --magisk-ver ${{ inputs.magiskver }} ${{ inputs.gapps }} --root-sol ${{ inputs.root }} ${{ inputs.amazonflag }} --compress-format none
+          # build.sh is self-contained: arch, release type, root solution,
+          # and GApps variant are all hard-coded in config.sh.
+          ./scripts/build.sh --compress-format 7z
 
-      - name: Install Houdini and Process Images 🔧
+      # ── Houdini (ARM on x86 translation) ──────────────────────────────────
+      - name: Install Houdini (ARM translation layer) 🔧
         working-directory: MagiskOnWSA
         run: |
           chmod +x ./libhoudini/houdini_installer.sh
           ./libhoudini/houdini_installer.sh "${{ steps.wsa.outputs.artifact_folder }}"
-        shell: bash
 
-      - name: Apply Custom Device Model 📱
-        if: inputs.devicemodel != 'none' && inputs.devicemodel != ''
+      # ── Device model spoof ────────────────────────────────────────────────
+      - name: Apply Pixel 5 (redfin) device model spoof 📱
         working-directory: MagiskOnWSA
         run: |
           chmod +x ./scripts/apply_custom_model.sh
-          ./scripts/apply_custom_model.sh "${{ steps.wsa.outputs.artifact_folder }}" "${{ inputs.devicemodel }}"
-        shell: bash
+          ./scripts/apply_custom_model.sh \
+            "${{ steps.wsa.outputs.artifact_folder }}" \
+            "redfin"
 
+      # ── Release tag prep ──────────────────────────────────────────────────
       - name: Prepare release tag 🏷️
-        id: releasetag
         run: |
           currentver="${{ inputs.wsa_ver }}"
           {
             echo "WSA_TAG=Windows_11_${currentver}"
-            echo "WSA_TAG_WIN10=Windows_10_${currentver}"
             echo "WSA_VER=${currentver}"
           } >> "$GITHUB_ENV"
 
-      - name: Pass to Windows 💸
-        uses: actions/upload-artifact@v7
+      # ── Upload Linux build artifact to pass to Windows runner ─────────────
+      - name: Upload build artifact to Windows runner 💸
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.wsa.outputs.artifact }}-${{ steps.wsa.outputs.built }}
           path: MagiskOnWSA/output
+          retention-days: 1
 
     outputs:
-      zipname: ${{ steps.wsa.outputs.artifact }}
+      zipname:         ${{ steps.wsa.outputs.artifact }}
       artifact_folder: ${{ steps.wsa.outputs.artifact_folder }}
-      built: ${{ steps.wsa.outputs.built }}
-      tag: ${{ env.WSA_TAG }}
-      tagwin10: ${{ env.WSA_TAG_WIN10 }}
-      wsaver: ${{ env.WSA_VER }}
+      built:           ${{ steps.wsa.outputs.built }}
+      tag:             ${{ env.WSA_TAG }}
+      wsaver:          ${{ env.WSA_VER }}
 
+  # ---------------------------------------------------------------------------
+  # make-pri — Windows runner: merge PRI, compact VHDx, compress, release
+  # ---------------------------------------------------------------------------
   make-pri:
-    name: Merge PRI resources
+    name: Merge PRI resources + compress + release
     runs-on: windows-latest
     needs: build
+
     steps:
-      - name: Checkout ♻️
-        uses: actions/checkout@v7
+      - name: Checkout repository ♻️
+        uses: actions/checkout@v4
 
-      - name: Download built artifact ⌛
-        uses: actions/download-artifact@v8
+      - name: Download build artifact ⌛
+        uses: actions/download-artifact@v4
         with:
+          name: ${{ needs.build.outputs.zipname }}-${{ needs.build.outputs.built }}
           path: output
-          name: ${{ needs.build.outputs.zipname }}-${{ needs.build.outputs.built }}
 
-      - name: Remove unused artifact ❌
-        uses: geekyeggo/delete-artifact@v6
+      - name: Remove temporary build artifact ❌
+        uses: geekyeggo/delete-artifact@v5
         with:
           name: ${{ needs.build.outputs.zipname }}-${{ needs.build.outputs.built }}
 
-      - name: Merge language and density resources 🧙🏻‍♂️
+      # ── PRI merge ─────────────────────────────────────────────────────────
+      - name: Merge language and density PRI resources 🧙🏻‍♂️
         shell: pwsh
         run: |
           $artifactDir = "${{ github.workspace }}\output\${{ needs.build.outputs.artifact_folder }}"
-          (Start-Process pwsh.exe -NoNewWindow -PassThru -Args "-ExecutionPolicy Bypass -File MakePri.ps1" -WorkingDirectory $artifactDir).WaitForExit()
+          (Start-Process pwsh.exe `
+            -NoNewWindow -PassThru `
+            -Args "-ExecutionPolicy Bypass -File MakePri.ps1" `
+            -WorkingDirectory $artifactDir
+          ).WaitForExit()
 
-      - name: Compact Images 💿
+      # ── VHDx compaction ───────────────────────────────────────────────────
+      - name: Compact partition images 💿
         shell: pwsh
         run: |
-          foreach ($Partition in 'system','product','system_ext','vendor') {
-              Write-Output "Optimizing of $Partition..."
-              Write-Output "SELECT VDISK FILE=`"${{ github.workspace }}\output\${{ needs.build.outputs.artifact_folder }}\$Partition.vhdx`"`nATTACH VDISK READONLY`nCOMPACT VDISK`nDETACH VDISK" | Set-Content -Path "$Partition.txt" -Encoding Ascii
-              Start-Process -NoNewWindow -Wait "diskpart.exe" -Args "/s $Partition.txt" -RedirectStandardOutput NUL
+          $artifactDir = "${{ github.workspace }}\output\${{ needs.build.outputs.artifact_folder }}"
+          foreach ($partition in 'system', 'product', 'system_ext', 'vendor') {
+            $vhdx = "$artifactDir\$partition.vhdx"
+            if (-not (Test-Path $vhdx)) {
+              Write-Warning "Partition image not found - skipping: $vhdx"
+              continue
+            }
+            Write-Output "Compacting $partition ..."
+            $diskpartScript = "SELECT VDISK FILE=`"$vhdx`"`nATTACH VDISK READONLY`nCOMPACT VDISK`nDETACH VDISK"
+            Set-Content -Path "$partition.txt" -Value $diskpartScript -Encoding Ascii
+            Start-Process -NoNewWindow -Wait "diskpart.exe" `
+              -Args "/s $partition.txt" `
+              -RedirectStandardOutput NUL
           }
 
-      - name: Compress artifact for Windows 11 x64 Build📦
+      # ── Compress ──────────────────────────────────────────────────────────
+      - name: Compress artifact (Windows 11 x64) 📦
         shell: pwsh
         working-directory: output
-        run: 7z a -t7z -mx=6 -m0=LZMA2 -ms=on -mmt=8 -- "${{ needs.build.outputs.zipname }}.7z" ${{ needs.build.outputs.artifact_folder }}\*
-
-      - name: Run WSA Windows 10 PowerShell Patch Script
-        shell: pwsh
         run: |
-          & "${{ github.workspace }}\MagiskOnWSA\Update Check\windows10patch.ps1" -OutputDir "${{ github.workspace }}\output\${{ needs.build.outputs.artifact_folder }}"
+          7z a -t7z -mx=6 -m0=LZMA2 -ms=on -mmt=8 `
+            -- "${{ needs.build.outputs.zipname }}.7z" `
+            ${{ needs.build.outputs.artifact_folder }}\*
 
-      - name: Compress artifact for Windows 10 x64 Build📦
-        shell: pwsh
-        working-directory: output
-        run: 7z a -t7z -mx=6 -m0=LZMA2 -ms=on -mmt=8 -sdel -- "${{ needs.build.outputs.zipname }}_Windows_10.7z" ${{ needs.build.outputs.artifact_folder }}\*
-
+      # ── SHA-256 checksum ──────────────────────────────────────────────────
       - name: Generate SHA-256 checksums ✔️
         shell: pwsh
         working-directory: output
         run: |
-          Get-ChildItem -Path . -Filter *.7z | ForEach-Object {
-              $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
-              "$hash  $($_.Name)"
+          Get-ChildItem -Filter *.7z | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
           } | Out-File -FilePath sha256-checksum.txt -Encoding utf8
 
-      - name: Upload Windows 11 x64 build to release 🤌
-        uses: softprops/action-gh-release@v3
+      # ── Publish to GitHub Release ──────────────────────────────────────────
+      - name: Upload to GitHub Release 🤌
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             output/${{ needs.build.outputs.zipname }}.7z
@@ -175,15 +250,4 @@ jobs:
           fail_on_unmatched_files: true
           append_body: false
           tag_name: ${{ needs.build.outputs.tag }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Windows 10 x64 build to release 🤌
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            output/${{ needs.build.outputs.zipname }}_Windows_10.7z
-            output/sha256-checksum.txt
-          fail_on_unmatched_files: true
-          append_body: false
-          tag_name: ${{ needs.build.outputs.tagwin10 }}
           token: ${{ secrets.GITHUB_TOKEN }}

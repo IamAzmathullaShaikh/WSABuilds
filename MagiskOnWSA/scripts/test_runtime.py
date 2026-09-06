@@ -53,9 +53,9 @@ def wait_for_adb_connection(max_wait=180):
     return False
 
 def run_runtime_diagnostics():
-    print("\n════════════════════════════════════════════════════", flush=True)
+    print("\n====================================================", flush=True)
     print(" Running Real-time Android Runtime Diagnostics", flush=True)
-    print("════════════════════════════════════════════════════\n", flush=True)
+    print("====================================================\n", flush=True)
 
     # 1. Device and OS properties
     print("[*] Checking device & OS properties...", flush=True)
@@ -107,9 +107,9 @@ def run_runtime_diagnostics():
     else:
         print("    [PASS] No fatal crashes or SELinux denials found in logcat!")
 
-    print("\n════════════════════════════════════════════════════", flush=True)
+    print("\n====================================================", flush=True)
     print(" Diagnostics completed!", flush=True)
-    print("════════════════════════════════════════════════════\n", flush=True)
+    print("====================================================\n", flush=True)
 
 def main():
     if not wait_for_wsa_install(max_wait=60):

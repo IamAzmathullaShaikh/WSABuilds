@@ -1,4 +1,4 @@
-﻿"""
+"""
 build_local.py — Native Windows standalone builder for WSABuilds
 
 Enables building, assembling, and patching WSA packages with Magisk Stable
@@ -125,21 +125,33 @@ def write_cpio_archive(path: Path, entries: list[CpioEntry]) -> None:
 
 
 def compress_xz(data: bytes) -> bytes:
-    return lzma.compress(data, format=lzma.FORMAT_XZ, preset=6)
+    return lzma.compress(data, format=lzma.FORMAT_XZ, check=lzma.CHECK_CRC32)
 
 
 def patch_initrd(initrd_path: Path, magisk_zip_path: Path, gapps_img_path: Path,
                  gapps_rc_path: Path, cust_img_path: Path, lspinit_path: Path,
                  post_fs_path: Path, init_lsp_rc_path: Path) -> None:
-    print(f"[*] Reading stock initrd from {initrd_path} ...")
-    entries = read_cpio_archive(initrd_path)
+    bak_path = initrd_path.with_suffix(".img.bak")
+    source_initrd = bak_path if bak_path.exists() else initrd_path
+
+    print(f"[*] Reading stock initrd from {source_initrd} ...")
+    entries = read_cpio_archive(source_initrd)
     print(f"    Loaded {len(entries)} CPIO entries from stock initrd.")
+
+    stock_init = None
+    for e in entries:
+        if e.name in ("init", "/init", "wsainit"):
+            stock_init = e
+            break
+
+    if not stock_init:
+        raise RuntimeError("Stock init binary not found in stock initrd.img")
 
     with zipfile.ZipFile(magisk_zip_path, "r") as mz:
         stub_data = mz.read("stub.apk") if "stub.apk" in mz.namelist() else magisk_zip_path.read_bytes()
-        magisk_data = mz.read("lib/x86_64/libmagisk.so") if "lib/x86_64/libmagisk.so" in mz.namelist() else b""
-        magisk32_data = mz.read("lib/x86/libmagisk.so") if "lib/x86/libmagisk.so" in mz.namelist() else b""
-        magiskinit_data = mz.read("lib/x86_64/libmagiskinit.so") if "lib/x86_64/libmagiskinit.so" in mz.namelist() else b""
+        magisk_data = mz.read("lib/x86_64/libmagisk.so")
+        init_ld_data = mz.read("lib/x86_64/libinit-ld.so")
+        magiskinit_data = mz.read("lib/x86_64/libmagiskinit.so")
 
     lspinit_data = lspinit_path.read_bytes()
     gapps_img_data = gapps_img_path.read_bytes()
@@ -148,57 +160,34 @@ def patch_initrd(initrd_path: Path, magisk_zip_path: Path, gapps_img_path: Path,
     post_fs_data = post_fs_path.read_bytes()
     init_lsp_rc_data = init_lsp_rc_path.read_bytes()
 
-    new_entries: list[CpioEntry] = []
-    for e in entries:
-        if e.name == "init":
-            e.name = "wsainit"
-            new_entries.append(e)
-        elif e.name == "/init":
-            e.name = "init"
-            e.data = b"lspinit"
-            e.mode = 0o120777
-            new_entries.append(e)
-        elif e.name in ("/lspinit", "lspinit"):
-            e.name = "lspinit"
-            e.data = lspinit_data
-            e.mode = 0o100750
-            new_entries.append(e)
-        elif e.name in ("/magiskinit", "magiskinit"):
-            e.name = "magiskinit"
-            e.data = magiskinit_data
-            e.mode = 0o100750
-            new_entries.append(e)
-        elif e.name.startswith("overlay.d/") or e.name == "overlay.d":
-            continue
-        else:
-            new_entries.append(e)
+    print("    Compressing Magisk payload binaries with XZ (CRC32) ...")
+    mag_xz = compress_xz(magisk_data)
+    init_ld_xz = compress_xz(init_ld_data)
+    stub_xz = compress_xz(stub_data)
 
-    if not any(e.name == "init" for e in new_entries):
-        new_entries.append(CpioEntry(name="init", data=b"lspinit", mode=0o120777))
-    if not any(e.name == "lspinit" for e in new_entries):
-        new_entries.append(CpioEntry(name="lspinit", data=lspinit_data, mode=0o100750))
-    if not any(e.name == "magiskinit" for e in new_entries):
-        new_entries.append(CpioEntry(name="magiskinit", data=magiskinit_data, mode=0o100750))
+    new_entries: list[CpioEntry] = [
+        CpioEntry(name=".backup", data=b"", mode=0o40000, nlink=2),
+        CpioEntry(name="init", data=b"lspinit", mode=0o120000),
+        CpioEntry(name="lspinit", data=lspinit_data, mode=0o100750),
+        CpioEntry(name="magiskinit", data=magiskinit_data, mode=0o100750),
+        CpioEntry(name="wsainit", data=stock_init.data, mode=0o100777),
+        CpioEntry(name="overlay.d", data=b"", mode=0o40750, nlink=2),
+        CpioEntry(name="overlay.d/gapps.rc", data=gapps_rc_data, mode=0o100000),
+        CpioEntry(name="overlay.d/init.lsp.magisk.rc", data=init_lsp_rc_data, mode=0o100000),
+        CpioEntry(name="overlay.d/sbin", data=b"", mode=0o40750, nlink=2),
+        CpioEntry(name="overlay.d/sbin/init-ld.xz", data=init_ld_xz, mode=0o100644),
+        CpioEntry(name="overlay.d/sbin/lsp_cust.img", data=cust_img_data, mode=0o100000),
+        CpioEntry(name="overlay.d/sbin/lsp_gapps.img", data=gapps_img_data, mode=0o100000),
+        CpioEntry(name="overlay.d/sbin/magisk.xz", data=mag_xz, mode=0o100644),
+        CpioEntry(name="overlay.d/sbin/post-fs-data.sh", data=post_fs_data, mode=0o100000),
+        CpioEntry(name="overlay.d/sbin/stub.xz", data=stub_xz, mode=0o100644),
+    ]
 
-    new_entries.append(CpioEntry(name="overlay.d", mode=0o040750))
-    new_entries.append(CpioEntry(name="overlay.d/sbin", mode=0o040750))
-    new_entries.append(CpioEntry(name="overlay.d/init.lsp.magisk.rc", data=init_lsp_rc_data, mode=0o100644))
-    new_entries.append(CpioEntry(name="overlay.d/gapps.rc", data=gapps_rc_data, mode=0o100644))
-    new_entries.append(CpioEntry(name="overlay.d/sbin/post-fs-data.sh", data=post_fs_data, mode=0o100750))
-    new_entries.append(CpioEntry(name="overlay.d/sbin/lsp_cust.img", data=cust_img_data, mode=0o100644))
-    new_entries.append(CpioEntry(name="overlay.d/sbin/lsp_gapps.img", data=gapps_img_data, mode=0o100644))
+    adbkey_pub = Path.home() / ".android" / "adbkey.pub"
+    if adbkey_pub.exists():
+        print(f"    Injecting host ADB public key from {adbkey_pub} for pre-authorization ...")
+        new_entries.append(CpioEntry(name="overlay.d/sbin/adbkey.pub", data=adbkey_pub.read_bytes(), mode=0o100644))
 
-    print("    Compressing Magisk payload binaries with XZ ...")
-    if magisk_data:
-        mag_xz = compress_xz(magisk_data)
-        new_entries.append(CpioEntry(name="overlay.d/sbin/magisk.xz", data=mag_xz, mode=0o100644))
-        new_entries.append(CpioEntry(name="overlay.d/sbin/magisk64.xz", data=mag_xz, mode=0o100644))
-    if magisk32_data:
-        new_entries.append(CpioEntry(name="overlay.d/sbin/magisk32.xz", data=compress_xz(magisk32_data), mode=0o100644))
-    if stub_data:
-        new_entries.append(CpioEntry(name="overlay.d/sbin/stub.xz", data=compress_xz(stub_data), mode=0o100644))
-
-    bak_path = initrd_path.with_suffix(".img.bak")
     if not bak_path.exists():
         shutil.copy2(initrd_path, bak_path)
 

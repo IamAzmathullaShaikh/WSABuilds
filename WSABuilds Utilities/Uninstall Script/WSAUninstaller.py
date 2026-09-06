@@ -56,44 +56,40 @@ dirs_to_check = [
 ]
 
 def with_restore_point_creation_frequency(minutes, func):
-    # Define the key path
     key_path = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore'
-
-    # Open the key
-    key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path, 0, winreg.KEY_ALL_ACCESS)
-
-    # Save the current value
+    key = None
+    current_value = None
     try:
-        current_value, _ = winreg.QueryValueEx(key, 'SystemRestorePointCreationFrequency')
-    except FileNotFoundError:
-        current_value = None
-
-    # Set the new value
-    winreg.SetValueEx(key, 'SystemRestorePointCreationFrequency', 0, winreg.REG_DWORD, minutes)
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path, 0, winreg.KEY_ALL_ACCESS)
+        try:
+            current_value, _ = winreg.QueryValueEx(key, 'SystemRestorePointCreationFrequency')
+        except FileNotFoundError:
+            current_value = None
+        winreg.SetValueEx(key, 'SystemRestorePointCreationFrequency', 0, winreg.REG_DWORD, minutes)
+    except Exception as e:
+        print(f"Notice: System restore frequency configuration skipped: {e}")
 
     try:
-        # Call the function
         func()
     finally:
-        # Restore the original value
-        if current_value is not None:
-            winreg.SetValueEx(key, 'SystemRestorePointCreationFrequency', 0, winreg.REG_DWORD, current_value)
-        else:
-            winreg.DeleteValue(key, 'SystemRestorePointCreationFrequency')
-
-    # Close the key
-    winreg.CloseKey(key)
+        if key is not None:
+            try:
+                if current_value is not None:
+                    winreg.SetValueEx(key, 'SystemRestorePointCreationFrequency', 0, winreg.REG_DWORD, current_value)
+                else:
+                    winreg.DeleteValue(key, 'SystemRestorePointCreationFrequency')
+                winreg.CloseKey(key)
+            except Exception:
+                pass
 
 def create_restore_point(name):
-    # Define the command
-    cmd = f'powershell.exe -Command "Checkpoint-Computer -Description \'{name}\' -RestorePointType \'MODIFY_SETTINGS\'"'
-
-    # Run the command
-    result = subprocess.run(cmd, shell=True)
-
-    # Check the return code
-    if result.returncode != 0:
-        raise Exception(f'Failed to create restore point. Command returned {result.returncode}')
+    try:
+        cmd = f'powershell.exe -Command "Checkpoint-Computer -Description \'{name}\' -RestorePointType \'MODIFY_SETTINGS\'"'
+        result = subprocess.run(cmd, shell=True)
+        if result.returncode != 0:
+            print("Notice: Could not create restore point (System Restore may be disabled). Proceeding...")
+    except Exception as exc:
+        print(f"Notice: Could not create restore point ({exc}). Proceeding...")
 
 def uninstall_msix_package(package_full_name):
     # Define the PowerShell command

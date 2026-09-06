@@ -38,8 +38,8 @@ import sys
 import tempfile
 import urllib.request
 
-REPO = "MustardChef/WSABuilds"
-API_URL = f"https://api.github.com/repos/{REPO}/releases"
+DEFAULT_REPO = os.environ.get("WSABUILDS_REPO", "IamAzmathullaShaikh/WSABuilds")
+FALLBACK_REPO = "MustardChef/WSABuilds"
 PACKAGE_PREFIX = "MicrosoftCorporationII.WindowsSubsystemForAndroid"
 
 
@@ -79,49 +79,54 @@ def get_installed_wsa():
 
 def api_get(url):
     req = urllib.request.Request(url, headers={"User-Agent": "WSAUpdater"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        print(f"Notice: GitHub API query error ({exc}) for {url}")
+        return []
 
 
 def find_release(win_os, arch):
     """Return (tag, asset_name, asset_url) of the newest matching release."""
-    page = 1
-    while page <= 10:
-        releases = api_get(f"{API_URL}?per_page=100&page={page}")
-        if not releases:
-            break
-        for release in releases:
-            tag = release.get("tag_name", "")
-            if release.get("draft"):
-                continue
-            if win_os == "Windows 11":
-                prefix = "Windows_11_"
-            else:
-                prefix = "Windows_10_"
-            if not tag.startswith(prefix):
-                continue
-            if arch == "arm64":
-                if not tag.endswith("_arm64"):
+    repos = [DEFAULT_REPO]
+    if FALLBACK_REPO not in repos:
+        repos.append(FALLBACK_REPO)
+
+    for repo in repos:
+        api_url = f"https://api.github.com/repos/{repo}/releases"
+        page = 1
+        while page <= 5:
+            releases = api_get(f"{api_url}?per_page=100&page={page}")
+            if not releases or not isinstance(releases, list):
+                break
+            for release in releases:
+                tag = release.get("tag_name", "")
+                if release.get("draft"):
                     continue
-            else:
-                if tag.endswith("_arm64"):
+                if win_os == "Windows 11":
+                    prefix = "Windows_11_"
+                else:
+                    prefix = "Windows_10_"
+                if not tag.startswith(prefix):
                     continue
-            # For Windows 10 the artifact carries a _Windows_10 suffix
-            suffix = "_Windows_10.7z" if win_os == "Windows 10" else ".7z"
-            for asset in release.get("assets", []):
-                name = asset["name"]
-                if name.endswith(suffix) and not name.endswith("_Windows_10.7z"):
-                    pass
-                if win_os == "Windows 10":
-                    if not name.endswith("_Windows_10.7z"):
+                if arch == "arm64":
+                    if not tag.endswith("_arm64"):
                         continue
                 else:
-                    if name.endswith("_Windows_10.7z"):
+                    if tag.endswith("_arm64"):
                         continue
-                    if not name.endswith(".7z"):
-                        continue
-                return tag, name, asset["browser_download_url"]
-        page += 1
+                suffix = "_Windows_10.7z" if win_os == "Windows 10" else ".7z"
+                for asset in release.get("assets", []):
+                    name = asset.get("name", "")
+                    if win_os == "Windows 10":
+                        if not name.endswith("_Windows_10.7z"):
+                            continue
+                    else:
+                        if name.endswith("_Windows_10.7z") or not name.endswith(".7z"):
+                            continue
+                    return tag, name, asset["browser_download_url"]
+            page += 1
     return None, None, None
 
 

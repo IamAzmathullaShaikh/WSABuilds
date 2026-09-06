@@ -32,10 +32,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout ♻️
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Setup Python 🏭
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           check-latest: true
           python-version: '3.x'
@@ -121,16 +121,16 @@ jobs:
     needs: build
     steps:
       - name: Checkout ♻️
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Download built artifact ⌛
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           path: output
           name: ${{ needs.build.outputs.zipname }}-${{ needs.build.outputs.built }}
 
       - name: Remove unused artifact ❌
-        uses: geekyeggo/delete-artifact@v6
+        uses: geekyeggo/delete-artifact@v5
         with:
           name: ${{ needs.build.outputs.zipname }}-${{ needs.build.outputs.built }}
 
@@ -176,7 +176,7 @@ jobs:
           } | Out-File -FilePath sha256-checksum.txt -Encoding utf8
 
       - name: Upload Windows 11 arm64 build to release 🤌
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             ${{ needs.build.outputs.zipname }}.7z

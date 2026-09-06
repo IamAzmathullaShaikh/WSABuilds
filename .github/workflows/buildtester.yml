@@ -71,10 +71,10 @@ jobs:
             fi
 
       - name: Checkout ♻️
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Setup Python 👷
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           check-latest: true
           python-version: '3.x'
@@ -150,10 +150,10 @@ jobs:
     needs: build
     steps:
       - name: Checkout ♻️
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Download built artifact ⌛
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@v4
         with:
           path: output
           key: ${{ needs.build.outputs.artifact }}-${{ needs.build.outputs.date }}

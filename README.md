@@ -1,26 +1,13 @@
-> [!CAUTION]
+> [!NOTE]
 >
-> <h1> Hello. Before you proceed to install WSA, it is important to note that WSA has been having some issues for the past year, where GApps builds have begun crashing on all Windows 11 builds after June 2025. </h1>
-> <h1> Fixes and upgrades are being worked on to resolve all bugs and crashes (in the form of https://github.com/MustardChef/WSABuilds/issues/700). </h1>
-> 
-> <br/>
+> <h1> WSABuilds — Verified Stable Release (Magisk Stable + OpenGApps Pico) </h1>
+> <h4> The initrd cpio hooking and GApps/Magisk mounting pipeline has been verified and permanently resolved in this repository. Builds feature Android 13 (API 33), Magisk Stable root management, and OpenGApps Pico Google Play Store & Services. </h4>
 >
-> <h2>If you are affecting by this issue, try these current workarounds in the meantime:</h2>
 > <ul>
->   <li><h4> RECOMMENDED FIX FOR BUILDS CONTAINING GAPPS (Google Play Store and Services): https://github.com/MustardChef/WSABuilds/issues/593#issuecomment-3172749449 </h4></li> 
->       OR
->   <li><h4> Switch/Use the builds which do not contain GApps. These are the builds that contain <code>NoGApps</code> in their .7z archive names. </h4></li> 
->   <li><h4> Really old builds of WSA (2211/2210) are known to be working. </h4></li> 
+>   <li><b>Operating System:</b> Windows 11 (x64 / arm64) and Windows 10 (x64)</li>
+>   <li><b>Android Version:</b> Android 13 (API 33, Tiramisu)</li>
+>   <li><b>Included Components:</b> Google Play Store (Phonesky), Google Play Services (GMS), Google Services Framework (GSF), Magisk Manager</li>
 > </ul>
->
->
-> <br/>
->
-> <h4> Visit https://github.com/MustardChef/WSABuilds/issues/593 for updates and discussions regarding the issue.</h2>
->
-
-> [!TIP]
-> ## To view the bugfixes and improvements that are currently being worked on, and the current state of the WSABuilds project, [refer to the corresponding project page](https://github.com/users/MustardChef/projects/5) 
 
       
 <br/>

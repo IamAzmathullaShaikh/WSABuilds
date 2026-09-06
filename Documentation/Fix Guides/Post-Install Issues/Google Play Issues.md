@@ -2,10 +2,13 @@
 <br/>
 
 
+> [!NOTE]
+> In recent builds, the primary root cause of Play Store / Services disappearing or failing to launch (initrd CPIO path mismatch and SELinux vsock/tmpfs denials) has been permanently fixed at the build level. If you still encounter crashes after initial account sign-in, follow the cache reset steps below.
+
 ## Issue: After signing in to your Google Account from the Play Store App, Play Store keeps crashing
 
 ### Preface: 
-##### This issue will prevent you from opening Play Store and effectively prevent the function of MindTheGapps/OpenGapps. This issue may usually occur after signing in. Known cases indicate that this issue is pretty common on newer hardware (12th or 13th Gen Intel Processors, for example)
+##### This issue may occur due to stale Google Play Services cache or temporary account sync collisions. Follow the steps below to clear application data and restore full functionality.
 
 ---
 
